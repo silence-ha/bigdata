@@ -1,0 +1,246 @@
+第 1 章Hadoop 组成
+在 Hadoop1.x 时 代 ， Hadoop中 的MapReduce同 时处理业务逻辑运算和资 源的调度，耦合性较大。 在Hadoop2.x时 代，增 加 了Yarn。Yarn只负责 资 源 的 调 度 ， MapReduce 只负责运算。 Hadoop3.x在组成上没 有变化。
+
+第 2 章 Hadoop 运行环境搭建
+2.1 模板虚拟机环境准备
+0）安装模板虚拟机，IP 地址 192.168.10.100、主机名称 hadoop100、内存 4G、硬盘 50G
+1）hadoop100 虚拟机配置要求如下（本文 Linux 系统全部以 CentOS-7.5-x86-1804 为例）
+（1）使用 yum 安装需要虚拟机可以正常上网，yum 安装前可以先测试下虚拟机联网情 况
+ping www.baidu.com
+（2）安装 epel-release
+   注：Extra Packages for Enterprise Linux 是为“红帽系”的操作系统提供额外的软件包， 适用于 RHEL、CentOS 和 Scientific Linux。相当于是一个软件仓库，大多数 rpm 包在官方 repository 中是找不到的）
+yum install -y epel-release
+ （3）注意：如果 Linux 安装的是最小系统版，还需要安装如下工具；如果安装的是 Linux 桌面标准版，不需要执行如下操作
+➢ net-tool：工具包集合，包含 ifconfig 等命令
+yum install -y net-tools
+  ➢ vim：编辑器
+yum install -y vim
+2）关闭防火墙，关闭防火墙开机自启
+   systemctl stop firewalld
+   systemctl disable firewalld.service
+  注意：在企业开发时，通常单个服务器的防火墙时关闭的。公司整体对外会设置非常安 全的防火墙
+3）创建 silence用户，并修改 silence用户的密码
+   useradd silence
+   passwd silence
+4）配置 silence用户具有 root 权限，方便后期加 sudo 执行 root 权限的命令
+   vim /etc/sudoers
+  修改/etc/sudoers 文件，在%wheel 这行下面添加一行，如下所示：
+   %wheel ALL=(ALL) ALL 
+添加：silence ALL=(ALL) NOPASSWD:ALL
+注意：silence这一行不要直接放到 root 行下面，因为所有用户都属于 wheel 组，你先 配置了 silence具有免密功能，但是程序执行到%wheel 行时，该功能又被覆盖回需要 密码。所以 silence要放到%wheel 这行下面。
+5）在/opt 目录下创建文件夹，并修改所属主和所属组
+  （1）在/opt 目录下创建 module、software 文件夹
+      mkdir /opt/module
+mkdir /opt/software
+  （2）修改 module、software 文件夹的所有者和所属组均为 silence用户
+      chown silence: silence /opt/module
+chown silence: silence /opt/software
+  （3）查看 module、software 文件夹的所有者和所属组
+6）卸载虚拟机自带的 JDK
+   注意：如果你的虚拟机是最小化安装不需要执行这一步。
+rpm -qa | grep -i java | xargs -n1 rpm -e --nodeps 
+➢ rpm -qa：查询所安装的所有 rpm 软件包 
+➢ grep -i：忽略大小写 
+➢ xargs -n1：表示每次只传递一个参数 
+➢ rpm -e –nodeps：强制卸载软件
+7）重启虚拟机
+   Reboot
+2.2 克隆虚拟机
+1）利用模板机 hadoop100，克隆三台虚拟机：hadoop102 hadoop103 hadoop104
+  注意：克隆时，要先关闭 hadoop100
+2）修改克隆机 IP，以下以 hadoop102 举例说明
+  （1）修改克隆虚拟机的静态 IP
+      vim /etc/sysconfig/network-scripts/ifcfgens33
+      改成 
+DEVICE=ens33 
+TYPE=Ethernet 
+ONBOOT=yes 
+BOOTPROTO=static 
+NAME="ens33" 
+IPADDR=192.168.137.102 
+PREFIX=24 
+GATEWAY=192.168.137.2 
+DNS1=192.168.137.2
+  （2）查看 Linux 虚拟机的虚拟网络编辑器，编辑->虚拟网络编辑器->VMnet8
+     Net模式下 子网ip 192.168.137.0 网关 192.168.137.2 
+  （3）查看 Windows 系统适配器 VMware Network Adapter VMnet8 的 IP 地址
+  （4）保证 Linux 系统 ifcfg-ens33 文件中 IP 地址、虚拟网络编辑器地址和 Windows 系 统 VM8 网络 IP 地址相同。
+3）修改克隆机主机名，以下以 hadoop102 举例说明
+  （1）修改主机名称 vim /etc/hostname   --- hadoop102
+（2）配置 Linux 克隆机主机名称映射 hosts 文件，打开/etc/hosts 
+vim /etc/hosts  
+添加如下内容 
+192.168.137.100 hadoop100 
+192.168.137.101 hadoop101 
+192.168.137.102 hadoop102 
+192.168.137.103 hadoop103 
+192.168.137.104 hadoop104
+4）重启克隆机 hadoop102   -- reboot
+5）修改 windows 的主机映射文件（hosts 文件）
+  （a）进入 C:\Windows\System32\drivers\etc 路径 
+（b）打开 hosts 文件并添加，然后保存
+2.3 在 hadoop102 安装 JDK
+1）卸载现有 JDK
+  注意：安装 JDK 前，一定确保提前删除了虚拟机自带的 JDK
+2）用 XShell 传输工具将 JDK 导入到 opt 目录下面的 software 文件夹下面
+3）在 Linux 系统下的 opt 目录中查看软件包是否导入成功
+4）解压 JDK 到/opt/module 目录下
+5）配置 JDK 环境变量
+  sudo vim /etc/profile.d/my_env.sh
+添加如下内容
+  #JAVA_HOME 
+export JAVA_HOME=/opt/module/jdk1.8.0_212 
+export PATH=$PATH:$JAVA_HOME/bin
+保存后退出 :wq 
+source 一下/etc/profile 文件，让新的环境变量 PATH 生效
+6）测试 JDK 是否安装成功    java -version
+2.4 在 hadoop102 安装 Hadoop
+   tar -zxvf hadoop-3.1.3.tar.gz -C /opt/module/
+   sudo vim /etc/profile.d/my_env.sh
+   ➢ 在 my_env.sh 文件末尾添加如下内容：（shift+g）
+ #HADOOP_HOME 
+export HADOOP_HOME=/opt/module/hadoop-3.1.3 
+export PATH=$PATH:$HADOOP_HOME/bin 
+export PATH=$PATH:$HADOOP_HOME/sbin
+让修改后的文件生效
+source /etc/profile
+第三章 完全分布式运行模式
+1）rsync 远程同步工具
+  rsync 主要用于备份和镜像。具有速度快、避免复制相同内容和支持符号链接的优点。 、rsync 和 scp 区别：用 rsync 做文件的复制要比 scp 的速度快，rsync 只对差异文件做更 新。scp 是把所有文件都复制过去。
+  rsync -av $pdir/$fname $user@$host:$pdir/$fname
+    -a 归档拷贝 -v 显示复制过程
+  xsync 集群分发脚本
+  Hadoop103 hadoop104  source /etc/profile
+2）配置 ssh
+ssh-keygen -t rsa
+然后敲（三个回车），就会生成两个文件 id_rsa（私钥）、id_rsa.pub（公钥）
+将公钥拷贝到要免密登录的目标机器上
+ssh-copy-id hadoop102
+ssh-copy-id hadoop103
+ssh-copy-id hadoop104
+注意： 还需要在 hadoop103 上采用 silence 账号配置一下无密登录到 hadoop102、hadoop103、 hadoop104 服务器上。 还需要在 hadoop104 上采用silence账号配置一下无密登录到 hadoop102、hadoop103、 hadoop104 服务器上。 还需要在 hadoop102 上采用 root 账号，配置一下无密登录到 hadoop102、hadoop103、 hadoop104；
+3）集群配置
+  配置 core-site.xml
+配置 hdfs-site.xml
+配置 yarn-site.xml
+配置 mapred-site.xml
+xsync /opt/module/hadoop3.1.3/etc/hadoop/
+vim /opt/module/hadoop3.1.3/etc/hadoop/workers
+注意：该文件中添加的内容结尾不允许有空格，文件中不允许有空行
+xsync /opt/module/hadoop-3.1.3/etc
+4）启动集群
+  （1）如果集群是第一次启动，需要在 hadoop102 节点格式化 NameNode（注意：格式 化 NameNode，会产生新的集群 id，导致 NameNode 和 DataNode 的集群 id 不一致，集群找 不到已往数据。如果集群在运行过程中报错，需要重新格式化 NameNode 的话，一定要先停 止 namenode 和 datanode 进程，并且要删除所有机器的 data 和 logs 目录，然后再进行格式 化。）
+   hdfs namenode -format
+ （2）启动 HDFS
+sbin/start-dfs.sh
+ （3）在配置了 ResourceManager 的节点（hadoop103）启动 YARN
+     sbin/start-yarn.sh
+  （4）Web 端查看 HDFS 的 NameNode
+ （a）浏览器中输入：http://hadoop102:9870
+ （b）查看 HDFS 上存储的数据信息 
+（5）Web 端查看 YARN 的 ResourceManager 
+（a）浏览器中输入：http://hadoop103:8088 
+（b）查看 YARN 上运行的 Job 信息
+5）配置历史服务器
+   vim mapred-site.xml
+   <!-- 历史服务器端地址 -->
+<property>
+   <name>mapreduce.jobhistory.address</name>
+   <value>hadoop102:10020</value>
+</property>
+<!-- 历史服务器 web 端地址 -->
+<property>
+ <name>mapreduce.jobhistory.webapp.address</name>
+ <value>hadoop102:19888</value>
+</property>
+分发配置
+xsync $HADOOP_HOME/etc/hadoop/mapred-site.xml
+在 hadoop102 启动历史服务器
+mapred --daemon start historyserver
+查看 JobHistory  http://hadoop102:19888/jobhistory
+6）配置日志的聚集
+   注意：开启日志聚集功能，需要重新启动 NodeManager 、ResourceManager 和 HistoryServer。
+   vim yarn-site.xml
+    <!-- 开启日志聚集功能 -->
+<property>
+ <name>yarn.log-aggregation-enable</name>
+ <value>true</value>
+</property>
+<!-- 设置日志聚集服务器地址 -->
+<property>
+ <name>yarn.log.server.url</name>
+   <value>http://hadoop102:19888/jobhistory/logs</value>
+</property>
+<!-- 设置日志保留时间为 7 天 -->
+<property>
+   <name>yarn.log-aggregation.retain-seconds</name>
+   <value>604800</value>
+</property>
+分发配置 xsync $HADOOP_HOME/etc/hadoop/yarnsite.xml
+7）集群启动/停止方式总结
+  1）各个模块分开启动/停止（配置 ssh 是前提）
+     （1）整体启动/停止 HDFS start-dfs.sh/stop-dfs.sh 
+（2）整体启动/停止 YARN start-yarn.sh/stop-yarn.sh
+  2）各个服务组件逐一启动/停止
+     （1）分别启动/停止 HDFS 组件 
+hdfs --daemon start/stop namenode/datanode/secondarynamenode 
+（2）启动/停止 YARN 
+yarn --daemon start/stop resourcemanager/nodemanager
+8）常用端口号说明
+   端口名称                 Hadoop2.x      Hadoop3.x
+  NameNode 内部通信端口    8020 / 9000    8020 / 9000/9820
+NameNode HTTP UI         50070          9870 
+MapReduce 查看执行任务端口 8088          8088 
+历史服务器通信端口         19888          19888
+9）集群时间同步
+   时间服务器配置（必须 root 用户） 
+（1）	查看所有节点 ntpd 服务状态和开机自启动状态
+sudo systemctl status ntpd 
+sudo systemctl start ntpd
+sudo systemctl is-enabled ntpd
+（2）	修改 hadoop102 的 ntp.conf 配置文件  sudo vim /etc/ntp.conf
+（a）	修改 1（授权 192.168.137.0-192.168.137.255 网段上的所有机器可以从这台机器上查 询和同步时间） 
+#restrict 192.168.137.0 mask 255.255.255.0 nomodify notrap 为 restrict 192.168.137.0 mask 255.255.255.0 nomodify notrap
+（b）	修改 2（集群在局域网中，不使用其他互联网上的时间）
+server 0.centos.pool.ntp.org iburst 
+server 1.centos.pool.ntp.org iburst 
+server 2.centos.pool.ntp.org iburst 
+server 3.centos.pool.ntp.org iburst 为
+#server 0.centos.pool.ntp.org iburst 
+#server 1.centos.pool.ntp.org iburst 
+#server 2.centos.pool.ntp.org iburst
+#server 3.centos.pool.ntp.org iburst
+（c）	添加 3（当该节点丢失网络连接，依然可以采用本地时间作为时间服务器为集群中 的其他节点提供时间同步） 
+server 127.127.1.0 
+fudge 127.127.1.0 stratum 10
+（3）	修改 hadoop102 的/etc/sysconfig/ntpd 文件
+sudo vim /etc/sysconfig/ntpd
+增加内容如下（让硬件时间与系统时间一起同步） SYNC_HWCLOCK=yes
+（4）	重新启动 ntpd 服务  sudo systemctl start ntpd
+（5）	设置 ntpd 服务开机启动   sudo systemctl enable ntpd
+其他机器配置（必须 root 用户）
+（1）关闭所有节点上 ntp 服务和自启动
+sudo systemctl stop ntpd 
+sudo systemctl disable ntpd
+（2）在其他机器配置 1 分钟与时间服务器同步一次
+sudo crontab -e 编写定时任务如下： */1 * * * * /usr/sbin/ntpdate hadoop102
+第 4 章 常见错误及解决方案
+1）防火墙没关闭、或者没有启动 YARN INFO client.RMProxy: Connecting to ResourceManager at hadoop108/192.168.10.108:8032 
+2）主机名称配置错误 
+3）IP 地址配置错误 
+4）ssh 没有配置好
+5）root 用户和 silence 两个用户启动集群不统一
+6）配置文件修改不细心 
+7）不识别主机名称
+解决办法： （1）在/etc/hosts 文件中添加 192.168.137.102 hadoop102 
+（2）主机名称不要起 hadoop hadoop000 等特殊名称
+8）DataNode 和 NameNode 进程同时只能工作一个
+解决办法：在格式化之前，先删除 DataNode里面的信息（默认在/tmp，如果配 置了该目录，那就去你配置的目录下删除数 据）
+9）执行命令不生效，粘贴 Word 中命令时，遇到-和长–没区分开。导致命令失效 解决办法：尽量不要粘贴 Word 中代码。 
+10）jps 发现进程已经没有，但是重新启动集群，提示进程已经开启。
+ 原因是在 Linux 的根目录下/tmp 目录中存在启动的进程临时文件，将集群相关进程删 除掉，再重新启动集群。 
+11）jps 不生效 原因：全局变量 hadoop java 没有生效。
+解决办法：需要 source /etc/profile 文件。 
+12）8088 端口连接不上  cat /etc/hosts 注释掉如下代码 
+#127.0.0.1 localhost localhost.localdomain localhost4 localhost4.localdomain4 
+#::1 hadoop102
